@@ -132,21 +132,88 @@ def fetch_data(hotel_names: tuple):
     names_sql = "', '".join([n.replace("'", "''") for n in hotel_names])
     query = f"""
     SELECT pl.Name AS hotel_name, pd.Brand, pl.Star_Category, pl.City,
-           s.aspect_id, s.treemap_name AS phrase, s.sentiment_type, COUNT(*) AS mention_count
+           s.aspect_id, s.treemap_name AS phrase, s.sentiment_type, 
+           e.Review_date,
+           COUNT(*) AS mention_count
     FROM `{PROJECT}.{DATASET}.product_user_review_enriched` e
     JOIN `{PROJECT}.{DATASET}.product_user_review_sentiment` s ON e.id = s.user_review_id
     JOIN `{PROJECT}.{DATASET}.product_list` pl ON e.product_id = pl.product_id
     JOIN `{PROJECT}.{DATASET}.product_description` pd ON pl.product_id = pd.product_id
     WHERE pl.Name IN ('{names_sql}')
-    GROUP BY pl.Name, pd.Brand, pl.Star_Category, pl.City, s.aspect_id, s.treemap_name, s.sentiment_type
+    GROUP BY pl.Name, pd.Brand, pl.Star_Category, pl.City, s.aspect_id, s.treemap_name, s.sentiment_type, e.Review_date
     """
     try:
         df = client.query(query).to_dataframe()
         df["aspect"] = df["aspect_id"].map(ASPECT_MAP).fillna("Other")
         df["mention_count"] = pd.to_numeric(df["mention_count"], errors="coerce").fillna(0).astype(int)
+        if "Review_date" in df.columns:
+            df["Review_date"] = pd.to_datetime(df["Review_date"], errors="coerce")
         return df
     except:
         return pd.DataFrame()
+
+@st.cache_data(ttl=600)
+def fetch_recent_trends(hotel_names: tuple, months: int = 3):
+    """Fetch sentiment trends for last N months"""
+    if client is None or not hotel_names:
+        return {}
+    
+    names_sql = "', '".join([n.replace("'", "''") for n in hotel_names])
+    
+    query = f"""
+    WITH recent_data AS (
+        SELECT 
+            pl.Name AS hotel_name,
+            s.aspect_id,
+            s.sentiment_type,
+            s.treemap_name AS phrase,
+            e.Review_date,
+            COUNT(*) AS mention_count
+        FROM `{PROJECT}.{DATASET}.product_user_review_enriched` e
+        JOIN `{PROJECT}.{DATASET}.product_user_review_sentiment` s ON e.id = s.user_review_id
+        JOIN `{PROJECT}.{DATASET}.product_list` pl ON e.product_id = pl.product_id
+        WHERE pl.Name IN ('{names_sql}')
+          AND e.Review_date >= DATE_SUB(CURRENT_DATE(), INTERVAL {months} MONTH)
+        GROUP BY pl.Name, s.aspect_id, s.sentiment_type, s.treemap_name, e.Review_date
+    ),
+    aspect_summary AS (
+        SELECT 
+            hotel_name,
+            aspect_id,
+            sentiment_type,
+            SUM(mention_count) AS total_mentions
+        FROM recent_data
+        GROUP BY hotel_name, aspect_id, sentiment_type
+    ),
+    top_phrases AS (
+        SELECT 
+            hotel_name,
+            sentiment_type,
+            phrase,
+            SUM(mention_count) AS phrase_count,
+            ROW_NUMBER() OVER (PARTITION BY hotel_name, sentiment_type ORDER BY SUM(mention_count) DESC) AS rn
+        FROM recent_data
+        GROUP BY hotel_name, sentiment_type, phrase
+    )
+    SELECT 
+        a.hotel_name,
+        a.aspect_id,
+        a.sentiment_type,
+        a.total_mentions,
+        p.phrase AS top_phrase,
+        p.phrase_count
+    FROM aspect_summary a
+    LEFT JOIN top_phrases p ON a.hotel_name = p.hotel_name 
+        AND a.sentiment_type = p.sentiment_type 
+        AND p.rn <= 5
+    ORDER BY a.hotel_name, a.aspect_id, a.sentiment_type
+    """
+    
+    try:
+        result = client.query(query).to_dataframe()
+        return result.to_dict('records') if not result.empty else []
+    except:
+        return []
 
 @st.cache_data(ttl=3600)
 def fetch_location_context(hotel_names: tuple):
@@ -523,6 +590,26 @@ with tab_insights:
                 pp = data_df[data_df["sentiment_type"].str.lower()=="positive"].groupby("phrase")["mention_count"].sum().nlargest(10).reset_index(name="cnt")
                 np_ = data_df[data_df["sentiment_type"].str.lower()=="negative"].groupby("phrase")["mention_count"].sum().nlargest(10).reset_index(name="cnt")
                 
+                # Recent trends (last 3 months)
+                recent_info = ""
+                if "Review_date" in data_df.columns and data_df["Review_date"].notna().any():
+                    three_months_ago = pd.Timestamp.now() - pd.DateOffset(months=3)
+                    recent_df = data_df[data_df["Review_date"] >= three_months_ago]
+                    
+                    if not recent_df.empty:
+                        # Recent positive phrases
+                        recent_pos = recent_df[recent_df["sentiment_type"].str.lower()=="positive"].groupby("phrase")["mention_count"].sum().nlargest(5)
+                        recent_neg = recent_df[recent_df["sentiment_type"].str.lower()=="negative"].groupby("phrase")["mention_count"].sum().nlargest(5)
+                        
+                        # Recent aspect scores
+                        recent_aspects = recent_df.groupby("aspect").apply(calc_sat).reset_index(name="sat_pct")
+                        
+                        recent_info = f"\n[LAST 3 MONTHS DATA]\n"
+                        recent_info += f"Recent Reviews: {int(recent_df['mention_count'].sum())} mentions\n"
+                        recent_info += f"Recent Positive Phrases: {', '.join(recent_pos.index.tolist())}\n"
+                        recent_info += f"Recent Negative Phrases: {', '.join(recent_neg.index.tolist())}\n"
+                        recent_info += f"Recent Aspect Scores:\n{recent_aspects.to_csv(index=False)}"
+                
                 # Fetch location context (nearby competitors)
                 location_ctx = fetch_location_context(hotel_names_tuple)
                 hotel_details = fetch_hotel_details(hotel_names_tuple)
@@ -555,6 +642,7 @@ with tab_insights:
                     "driver": dr.to_csv(index=False),
                     "pos_phrases": pp.to_csv(index=False), 
                     "neg_phrases": np_.to_csv(index=False),
+                    "recent_trends": recent_info if recent_info else "Recent data not available",
                     "hotels": ", ".join(data_df["hotel_name"].unique()[:10]),
                     "brands": ", ".join(data_df["Brand"].unique()),
                     "cities": ", ".join(data_df["City"].unique()),
@@ -595,6 +683,9 @@ Star Category: {ctx['stars']}
 === NEARBY COMPETITORS (same area, similar star category) ===
 {ctx['competitors'] if ctx['competitors'] else 'Competitor data not available'}
 
+=== RECENT TRENDS (Last 3 Months) ===
+{ctx['recent_trends'] if ctx.get('recent_trends') else 'Recent data not available'}
+
 === SPELLING CORRECTIONS ===
 Cities: bangalore/blr/banglore→Bengaluru, bombay→Mumbai, madras→Chennai, calcutta→Kolkata
 Hotels: marriot→Marriott, oberoy→Oberoi, viventa→Vivanta, lela→Leela
@@ -604,16 +695,16 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost→Val
 {hist_txt}
 
 === DATA ===
-[Aspect x Hotel Satisfaction %]
+[Aspect x Hotel Satisfaction % - ALL TIME]
 {ctx['aspect_hotel']}
 
 [Driver Analysis]
 {ctx['driver']}
 
-[What Guests Love]
+[What Guests Love - Top Phrases]
 {ctx['pos_phrases']}
 
-[What Guests Complain About]
+[What Guests Complain About - Top Phrases]
 {ctx['neg_phrases']}
 
 === QUESTION ===
@@ -621,7 +712,7 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost→Val
 
 === RESPONSE FORMAT (ALWAYS FOLLOW THIS) ===
 
-📊 **Insight**: [2-3 sentence summary with specific scores. If competitors available, compare directly.]
+📊 **Insight**: [2-3 sentence summary with specific scores. If asking about recent trends, use LAST 3 MONTHS data. Compare to competitors if available.]
 
 🎯 **Actions by Department**:
 
@@ -679,49 +770,128 @@ When competitor data is available:
                 with st.chat_message(msg["role"]):
                     st.write(msg["content"])
             
-            # Suggestions
+            # ─────────────────────────────────────────
+            # BASIC HOTEL STATS (Always show)
+            # ─────────────────────────────────────────
             if not st.session_state.analyst_history:
-                st.markdown("**💡 Ask SmaartAnalyst:**")
+                # Calculate quick stats
+                def calc_hotel_stats(data_df):
+                    stats = []
+                    for hotel in data_df["hotel_name"].unique()[:4]:
+                        hd = data_df[data_df["hotel_name"] == hotel]
+                        pos = hd[hd["sentiment_type"].str.lower()=="positive"]["mention_count"].sum()
+                        neg = hd[hd["sentiment_type"].str.lower()=="negative"]["mention_count"].sum()
+                        overall = round(pos/(pos+neg)*100, 0) if (pos+neg) else 0
+                        
+                        # Best and worst aspects
+                        aspect_scores = []
+                        for asp in hd["aspect"].unique():
+                            ad = hd[hd["aspect"]==asp]
+                            ap = ad[ad["sentiment_type"].str.lower()=="positive"]["mention_count"].sum()
+                            an = ad[ad["sentiment_type"].str.lower()=="negative"]["mention_count"].sum()
+                            ascore = round(ap/(ap+an)*100, 0) if (ap+an) else 0
+                            aspect_scores.append({"aspect": asp, "score": ascore})
+                        
+                        aspect_scores.sort(key=lambda x: x["score"], reverse=True)
+                        best = aspect_scores[0] if aspect_scores else {"aspect": "N/A", "score": 0}
+                        worst = aspect_scores[-1] if aspect_scores else {"aspect": "N/A", "score": 0}
+                        
+                        stats.append({
+                            "hotel": hotel[:30],
+                            "overall": overall,
+                            "best": best,
+                            "worst": worst,
+                            "reviews": int(pos + neg)
+                        })
+                    return stats
+                
+                hotel_stats = calc_hotel_stats(df)
+                
+                # Display stats cards
+                st.markdown("##### 📊 Quick Overview")
+                cols = st.columns(min(len(hotel_stats), 2))
+                for i, stat in enumerate(hotel_stats[:2]):
+                    with cols[i]:
+                        st.markdown(f"""
+                        <div style='background: linear-gradient(135deg, #0d9488 0%, #115e59 100%); 
+                                    padding: 15px; border-radius: 10px; color: white; margin-bottom: 10px;'>
+                            <div style='font-weight: bold; font-size: 14px;'>{stat['hotel']}</div>
+                            <div style='font-size: 28px; font-weight: bold;'>{stat['overall']:.0f}%</div>
+                            <div style='font-size: 11px; opacity: 0.9;'>Overall Satisfaction</div>
+                            <div style='margin-top: 8px; font-size: 12px;'>
+                                ✅ Best: {stat['best']['aspect']} ({stat['best']['score']:.0f}%)<br>
+                                ⚠️ Watch: {stat['worst']['aspect']} ({stat['worst']['score']:.0f}%)
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                st.markdown("---")
+            
+            # ─────────────────────────────────────────
+            # SUGGESTED QUESTIONS (Always show)
+            # ─────────────────────────────────────────
+            st.markdown("**💡 Ask SmaartAnalyst:**")
+            
+            # Different questions based on conversation state
+            if not st.session_state.analyst_history:
+                # Initial questions
                 if len(hotels_list) == 1:
                     sugs = [
-                        f"How do I beat nearby competitors?",
+                        "What's good & bad in the last 3 months?",
+                        "How do I beat nearby competitors?",
                         "What's my biggest USP for marketing?",
-                        "What are guests complaining about?",
                         "Give me SEO keywords to target"
                     ]
                 else:
                     sugs = [
+                        "What changed in the last 3 months?",
                         f"Compare {hotels_list[0][:15]} vs {hotels_list[1][:15]}",
                         "Who's winning on Dining?",
-                        "Which hotel should worry about cleanliness?",
-                        "Best USPs for each hotel's marketing"
+                        "Best USPs for marketing"
                     ]
-                
-                c1, c2 = st.columns(2)
-                for i, s in enumerate(sugs):
-                    col = c1 if i%2==0 else c2
-                    if col.button(s, key=f"as_{i}", use_container_width=True):
-                        st.session_state.analyst_history.append({"role":"user","content":s})
-                        with st.chat_message("user"): st.write(s)
-                        with st.chat_message("assistant"):
-                            with st.spinner("Analyzing..."):
-                                resp = run_analyst(s, df, st.session_state.analyst_history)
-                                st.write(resp)
-                        st.session_state.analyst_history.append({"role":"assistant","content":resp})
-                        st.rerun()
+            else:
+                # Follow-up questions based on last response
+                last_msg = st.session_state.analyst_history[-1]["content"] if st.session_state.analyst_history else ""
+                sugs = [
+                    "Recent complaints in last 3 months?",
+                    "Go deeper on the weakest aspect",
+                    "Give me ad copy for Google Ads",
+                    "How do we beat the nearest competitor?"
+                ]
             
-            aq = st.chat_input("Ask about selected hotels...", key="analyst_q")
+            # Always show suggestion buttons
+            c1, c2 = st.columns(2)
+            for i, s in enumerate(sugs):
+                col = c1 if i % 2 == 0 else c2
+                if col.button(s, key=f"sug_{i}_{len(st.session_state.analyst_history)}", use_container_width=True):
+                    st.session_state.analyst_history.append({"role": "user", "content": s})
+                    with st.chat_message("user"):
+                        st.write(s)
+                    with st.chat_message("assistant"):
+                        with st.spinner("Analyzing..."):
+                            resp = run_analyst(s, df, st.session_state.analyst_history)
+                            st.write(resp)
+                    st.session_state.analyst_history.append({"role": "assistant", "content": resp})
+                    st.rerun()
+            
+            # ─────────────────────────────────────────
+            # FREE TEXT INPUT
+            # ─────────────────────────────────────────
+            aq = st.chat_input("Or type your own question...", key="analyst_q")
             if aq:
-                st.session_state.analyst_history.append({"role":"user","content":aq})
-                with st.chat_message("user"): st.write(aq)
+                st.session_state.analyst_history.append({"role": "user", "content": aq})
+                with st.chat_message("user"):
+                    st.write(aq)
                 with st.chat_message("assistant"):
                     with st.spinner("Analyzing..."):
                         resp = run_analyst(aq, df, st.session_state.analyst_history)
                         st.write(resp)
-                st.session_state.analyst_history.append({"role":"assistant","content":resp})
+                st.session_state.analyst_history.append({"role": "assistant", "content": resp})
+                st.rerun()
             
+            # Clear button
             if st.session_state.analyst_history:
-                if st.button("🗑️ Clear SmaartAnalyst", key="clr_a"):
+                if st.button("🗑️ Start Fresh", key="clr_a"):
                     st.session_state.analyst_history = []
                     st.rerun()
 

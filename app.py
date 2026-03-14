@@ -134,13 +134,16 @@ def fetch_data(hotel_names: tuple):
     SELECT pl.Name AS hotel_name, pd.Brand, pl.Star_Category, pl.City,
            s.aspect_id, s.treemap_name AS phrase, s.sentiment_type, 
            e.Review_date,
+           e.inferred_gender AS gender,
+           e.traveler_type,
+           e.stay_purpose,
            COUNT(*) AS mention_count
     FROM `{PROJECT}.{DATASET}.product_user_review_enriched` e
     JOIN `{PROJECT}.{DATASET}.product_user_review_sentiment` s ON e.id = s.user_review_id
     JOIN `{PROJECT}.{DATASET}.product_list` pl ON e.product_id = pl.product_id
     JOIN `{PROJECT}.{DATASET}.product_description` pd ON pl.product_id = pd.product_id
     WHERE pl.Name IN ('{names_sql}')
-    GROUP BY pl.Name, pd.Brand, pl.Star_Category, pl.City, s.aspect_id, s.treemap_name, s.sentiment_type, e.Review_date
+    GROUP BY pl.Name, pd.Brand, pl.Star_Category, pl.City, s.aspect_id, s.treemap_name, s.sentiment_type, e.Review_date, e.inferred_gender, e.traveler_type, e.stay_purpose
     """
     try:
         df = client.query(query).to_dataframe()
@@ -610,6 +613,44 @@ with tab_insights:
                         recent_info += f"Recent Negative Phrases: {', '.join(recent_neg.index.tolist())}\n"
                         recent_info += f"Recent Aspect Scores:\n{recent_aspects.to_csv(index=False)}"
                 
+                # Persona & Traveler Analysis
+                persona_info = ""
+                if "traveler_type" in data_df.columns:
+                    traveler_dist = data_df.groupby("traveler_type")["mention_count"].sum()
+                    if not traveler_dist.empty:
+                        total = traveler_dist.sum()
+                        persona_info += "\n[TRAVELER MIX]\n"
+                        for t, cnt in traveler_dist.nlargest(5).items():
+                            if pd.notna(t) and t:
+                                persona_info += f"• {t}: {cnt/total*100:.1f}%\n"
+                
+                if "stay_purpose" in data_df.columns:
+                    purpose_dist = data_df.groupby("stay_purpose")["mention_count"].sum()
+                    if not purpose_dist.empty:
+                        total = purpose_dist.sum()
+                        persona_info += "\n[STAY PURPOSE]\n"
+                        for p, cnt in purpose_dist.nlargest(5).items():
+                            if pd.notna(p) and p:
+                                persona_info += f"• {p}: {cnt/total*100:.1f}%\n"
+                
+                if "gender" in data_df.columns:
+                    gender_dist = data_df.groupby("gender")["mention_count"].sum()
+                    if not gender_dist.empty:
+                        total = gender_dist.sum()
+                        persona_info += "\n[GENDER MIX]\n"
+                        for g, cnt in gender_dist.items():
+                            if pd.notna(g) and g:
+                                persona_info += f"• {g}: {cnt/total*100:.1f}%\n"
+                
+                # Persona-specific insights (what each segment complains about)
+                persona_insights = ""
+                if "traveler_type" in data_df.columns:
+                    for ttype in data_df["traveler_type"].dropna().unique()[:3]:
+                        tdata = data_df[data_df["traveler_type"] == ttype]
+                        neg_phrases = tdata[tdata["sentiment_type"].str.lower()=="negative"].groupby("phrase")["mention_count"].sum().nlargest(3)
+                        if not neg_phrases.empty:
+                            persona_insights += f"\n{ttype} travelers complain about: {', '.join(neg_phrases.index.tolist())}"
+                
                 # Fetch location context (nearby competitors)
                 location_ctx = fetch_location_context(hotel_names_tuple)
                 hotel_details = fetch_hotel_details(hotel_names_tuple)
@@ -643,6 +684,8 @@ with tab_insights:
                     "pos_phrases": pp.to_csv(index=False), 
                     "neg_phrases": np_.to_csv(index=False),
                     "recent_trends": recent_info if recent_info else "Recent data not available",
+                    "persona_data": persona_info if persona_info else "Persona data not available",
+                    "persona_insights": persona_insights if persona_insights else "",
                     "hotels": ", ".join(data_df["hotel_name"].unique()[:10]),
                     "brands": ", ".join(data_df["Brand"].unique()),
                     "cities": ", ".join(data_df["City"].unique()),
@@ -669,6 +712,7 @@ Hotel operations teams who need actionable intelligence from guest feedback:
 === YOUR PURPOSE ===
 Transform guest sentiment into DECISIONS and ACTIONS by department.
 Use location intelligence to provide competitive positioning advice.
+Support R&D mode for new hotel planning with persona and competitor insights.
 Every response MUST end with categorized action items.
 
 === CONTEXT ===
@@ -682,6 +726,10 @@ Star Category: {ctx['stars']}
 
 === NEARBY COMPETITORS (same area, similar star category) ===
 {ctx['competitors'] if ctx['competitors'] else 'Competitor data not available'}
+
+=== GUEST PERSONAS & TRAVELER DATA ===
+{ctx.get('persona_data', 'Persona data not available')}
+{ctx.get('persona_insights', '')}
 
 === RECENT TRENDS (Last 3 Months) ===
 {ctx['recent_trends'] if ctx.get('recent_trends') else 'Recent data not available'}
@@ -712,7 +760,7 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost→Val
 
 === RESPONSE FORMAT (ALWAYS FOLLOW THIS) ===
 
-📊 **Insight**: [2-3 sentence summary with specific scores. If asking about recent trends, use LAST 3 MONTHS data. Compare to competitors if available.]
+📊 **Insight**: [2-3 sentence summary with specific scores. Include persona/traveler data if relevant. Compare to competitors if available.]
 
 🎯 **Actions by Department**:
 
@@ -736,6 +784,29 @@ When competitor data is available:
 2. FIND GAPS: "Competitor weak on Staff (65%) - steal with 'legendary service' messaging"
 3. IDENTIFY THREATS: "Competitor beats you on Pool (88% vs 72%) - AVOID 'pool' keywords"
 4. SUGGEST ATTACK: For "How do I beat X?" questions, give specific win/lose breakdown
+
+=== R&D MODE (New Hotel Planning) ===
+When asked about opening a new hotel, planning, or R&D:
+1. Analyze COMPETITOR landscape in that area (use nearby competitors data)
+2. Show TRAVELER MIX: What type of guests visit this area? (Business/Couple/Family/Solo)
+3. Show STAY PURPOSE: Why do people come? (Business/Leisure/Wedding/Conference)
+4. Identify GAPS: What are competitors weak at? What's underserved?
+5. Provide BUILD RECOMMENDATIONS: What to focus on based on gaps
+
+Format for R&D queries:
+📊 **Market Analysis**: [Area competitive landscape with scores]
+👥 **Traveler Mix**: [Business X%, Couples Y%, Family Z%]
+🎯 **Purpose**: [Business X%, Leisure Y%]
+⚠️ **Competitor Weaknesses**: [What they're bad at = your opportunity]
+🛠️ **Build Recommendations**: [What to invest in based on gaps]
+
+=== PERSONA-BASED INSIGHTS ===
+When asked about specific traveler types or genders:
+- Use traveler_type data (Solo, Couple, Family, Business, Group)
+- Use stay_purpose data (Business, Leisure, Wedding, Conference)
+- Use gender data if relevant
+- Show what each segment complains about
+- Example: "Business travelers complain about 'slow wifi' and 'noisy rooms'"
 
 === SEO & MARKETING SPECIAL INSTRUCTIONS ===
 - Use actual guest phrases for ad copy: "guests say 'best biryani' → use in Google Ads"
@@ -766,7 +837,7 @@ Generate FAQs dynamically based on:
 1. Answer ONLY from data provided. Never hallucinate.
 2. If query is in Hindi/Tamil/Telugu, respond in SAME language but keep emoji headers.
 3. Always cite specific % scores.
-4. Be direct - max 300 words for FAQs.
+4. Be direct - max 300 words for FAQs, 350 for R&D.
 5. For non-FAQ queries, ALWAYS end with "🎯 Actions by Department".
 6. Make every action specific and executable TODAY.
 """
@@ -857,25 +928,25 @@ Generate FAQs dynamically based on:
                 if len(hotels_list) == 1:
                     sugs = [
                         "What's good & bad in the last 3 months?",
+                        "Who are my guests? (traveler type & purpose)",
                         "How do I beat nearby competitors?",
-                        "What's my biggest USP for marketing?",
                         "Give me SEO keywords to target"
                     ]
                 else:
                     sugs = [
-                        "What changed in the last 3 months?",
+                        "What's the traveler mix in this area?",
                         f"Compare {hotels_list[0][:15]} vs {hotels_list[1][:15]}",
-                        "Who's winning on Dining?",
+                        "What are Business travelers complaining about?",
                         "Best USPs for marketing"
                     ]
             else:
                 # Follow-up questions based on last response
                 last_msg = st.session_state.analyst_history[-1]["content"] if st.session_state.analyst_history else ""
                 sugs = [
-                    "Recent complaints in last 3 months?",
-                    "Go deeper on the weakest aspect",
+                    "What do Business travelers want?",
+                    "GEO-based FAQs for my website",
                     "Give me ad copy for Google Ads",
-                    "How do we beat the nearest competitor?"
+                    "If I open a new hotel here, what should I focus on?"
                 ]
             
             # Always show suggestion buttons

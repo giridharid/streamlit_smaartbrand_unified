@@ -148,6 +148,127 @@ def fetch_data(hotel_names: tuple):
     except:
         return pd.DataFrame()
 
+@st.cache_data(ttl=3600)
+def fetch_location_context(hotel_names: tuple):
+    """Fetch nearby competitors with their satisfaction scores by aspect"""
+    if client is None or not hotel_names:
+        return []
+    
+    names_sql = "', '".join([n.replace("'", "''") for n in hotel_names])
+    
+    query = f"""
+    WITH selected_hotels AS (
+        SELECT 
+            pl.Name AS hotel_name,
+            pl.City,
+            pl.Star_Category,
+            pd.Brand,
+            pd.Latitude,
+            pd.Longitude,
+            pd.Address
+        FROM `{PROJECT}.{DATASET}.product_list` pl
+        JOIN `{PROJECT}.{DATASET}.product_description` pd ON pl.product_id = pd.product_id
+        WHERE pl.Name IN ('{names_sql}')
+    ),
+    nearby_competitors AS (
+        SELECT 
+            sh.hotel_name AS selected_hotel,
+            pl.Name AS competitor_name,
+            pd.Brand AS competitor_brand,
+            pl.Star_Category AS competitor_stars,
+            pl.City AS competitor_city,
+            CASE 
+                WHEN sh.Latitude IS NOT NULL AND pd.Latitude IS NOT NULL THEN
+                    ROUND(ST_DISTANCE(
+                        ST_GEOGPOINT(sh.Longitude, sh.Latitude),
+                        ST_GEOGPOINT(pd.Longitude, pd.Latitude)
+                    ) / 1000, 1)
+                ELSE NULL
+            END AS distance_km
+        FROM selected_hotels sh
+        CROSS JOIN `{PROJECT}.{DATASET}.product_list` pl
+        JOIN `{PROJECT}.{DATASET}.product_description` pd ON pl.product_id = pd.product_id
+        WHERE pl.Name NOT IN ('{names_sql}')
+          AND pl.City = sh.City
+          AND ABS(pl.Star_Category - sh.Star_Category) <= 1
+    ),
+    competitor_aspect_scores AS (
+        SELECT 
+            pl.Name AS hotel_name,
+            s.aspect_id,
+            ROUND(SUM(CASE WHEN s.sentiment_type = 'positive' THEN 1 ELSE 0 END) * 100.0 / 
+                  NULLIF(COUNT(*), 0), 0) AS satisfaction_pct
+        FROM `{PROJECT}.{DATASET}.product_user_review_sentiment` s
+        JOIN `{PROJECT}.{DATASET}.product_user_review_enriched` e ON s.user_review_id = e.id
+        JOIN `{PROJECT}.{DATASET}.product_list` pl ON e.product_id = pl.product_id
+        GROUP BY pl.Name, s.aspect_id
+    ),
+    competitor_overall AS (
+        SELECT 
+            hotel_name,
+            ROUND(AVG(satisfaction_pct), 0) AS overall_satisfaction
+        FROM competitor_aspect_scores
+        GROUP BY hotel_name
+    )
+    SELECT 
+        nc.selected_hotel,
+        nc.competitor_name,
+        nc.competitor_brand,
+        nc.competitor_stars,
+        nc.distance_km,
+        co.overall_satisfaction,
+        -- Pivot aspect scores
+        MAX(CASE WHEN cas.aspect_id = 1 THEN cas.satisfaction_pct END) AS dining_score,
+        MAX(CASE WHEN cas.aspect_id = 2 THEN cas.satisfaction_pct END) AS cleanliness_score,
+        MAX(CASE WHEN cas.aspect_id = 3 THEN cas.satisfaction_pct END) AS amenities_score,
+        MAX(CASE WHEN cas.aspect_id = 4 THEN cas.satisfaction_pct END) AS staff_score,
+        MAX(CASE WHEN cas.aspect_id = 5 THEN cas.satisfaction_pct END) AS room_score,
+        MAX(CASE WHEN cas.aspect_id = 6 THEN cas.satisfaction_pct END) AS location_score,
+        MAX(CASE WHEN cas.aspect_id = 7 THEN cas.satisfaction_pct END) AS value_score
+    FROM nearby_competitors nc
+    LEFT JOIN competitor_overall co ON nc.competitor_name = co.hotel_name
+    LEFT JOIN competitor_aspect_scores cas ON nc.competitor_name = cas.hotel_name
+    GROUP BY nc.selected_hotel, nc.competitor_name, nc.competitor_brand, nc.competitor_stars, nc.distance_km, co.overall_satisfaction
+    ORDER BY nc.distance_km
+    LIMIT 10
+    """
+    
+    try:
+        result = client.query(query).to_dataframe()
+        return result.to_dict('records') if not result.empty else []
+    except Exception as e:
+        return []
+
+@st.cache_data(ttl=3600)
+def fetch_hotel_details(hotel_names: tuple):
+    """Fetch hotel location details including nearby landmarks"""
+    if client is None or not hotel_names:
+        return []
+    
+    names_sql = "', '".join([n.replace("'", "''") for n in hotel_names])
+    
+    query = f"""
+    SELECT 
+        pl.Name AS hotel_name,
+        pl.City,
+        pl.Star_Category,
+        pd.Brand,
+        pd.Address,
+        pd.Latitude,
+        pd.Longitude,
+        pd.Rating AS google_rating,
+        pd.Amenities
+    FROM `{PROJECT}.{DATASET}.product_list` pl
+    JOIN `{PROJECT}.{DATASET}.product_description` pd ON pl.product_id = pd.product_id
+    WHERE pl.Name IN ('{names_sql}')
+    """
+    
+    try:
+        result = client.query(query).to_dataframe()
+        return result.to_dict('records') if not result.empty else []
+    except:
+        return []
+
 # ─────────────────────────────────────────
 # CHAT CLIENT
 # ─────────────────────────────────────────
@@ -168,15 +289,15 @@ def get_chat_client():
 # ─────────────────────────────────────────
 st.markdown("""
 <div class="main-header">
-    <h1>🏨 Smaartbrand Intelligence</h1>
-    <p>Deep Insights & AI Chat • Multi-language • Smart Corrections</p>
+    <h1>&#127976; Smaartbrand Intelligence</h1>
+    <p>Deep Insights & AI Chat - Multi-language - Smart Corrections</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────
-tab_insights, tab_chat = st.tabs(["📊 Deep Insights", "💬 Chat with Data"])
+tab_insights, tab_chat = st.tabs(["Deep Insights", "Chat with Data"])
 
 # ═══════════════════════════════════════════
 # TAB 1: DEEP INSIGHTS
@@ -389,7 +510,7 @@ with tab_insights:
                 st.markdown(f"Analyzing: **{len(hotels_list)} hotels**")
             
             # Build context
-            def build_context(data_df):
+            def build_context(data_df, hotel_names_tuple):
                 def calc_sat(g):
                     pos = g[g["sentiment_type"].str.lower()=="positive"]["mention_count"].sum()
                     neg = g[g["sentiment_type"].str.lower()=="negative"]["mention_count"].sum()
@@ -402,31 +523,84 @@ with tab_insights:
                 pp = data_df[data_df["sentiment_type"].str.lower()=="positive"].groupby("phrase")["mention_count"].sum().nlargest(10).reset_index(name="cnt")
                 np_ = data_df[data_df["sentiment_type"].str.lower()=="negative"].groupby("phrase")["mention_count"].sum().nlargest(10).reset_index(name="cnt")
                 
-                return {"aspect_hotel": ah.to_csv(index=False), "driver": dr.to_csv(index=False),
-                        "pos_phrases": pp.to_csv(index=False), "neg_phrases": np_.to_csv(index=False),
-                        "hotels": ", ".join(data_df["hotel_name"].unique()[:10]),
-                        "brands": ", ".join(data_df["Brand"].unique()),
-                        "cities": ", ".join(data_df["City"].unique()),
-                        "stars": ", ".join([str(int(s)) for s in data_df["Star_Category"].unique()])}
+                # Fetch location context (nearby competitors)
+                location_ctx = fetch_location_context(hotel_names_tuple)
+                hotel_details = fetch_hotel_details(hotel_names_tuple)
+                
+                # Format competitor data with aspect scores
+                competitor_info = ""
+                if location_ctx:
+                    for comp in location_ctx[:5]:  # Top 5 competitors
+                        competitor_info += f"\n• {comp.get('competitor_name', 'N/A')} ({comp.get('competitor_brand', '')} {comp.get('competitor_stars', '')}⭐)"
+                        competitor_info += f" - {comp.get('distance_km', '?')}km away"
+                        competitor_info += f" - Overall: {comp.get('overall_satisfaction', '?')}%"
+                        competitor_info += f" | Dining:{comp.get('dining_score', '?')}%"
+                        competitor_info += f" Staff:{comp.get('staff_score', '?')}%"
+                        competitor_info += f" Room:{comp.get('room_score', '?')}%"
+                        competitor_info += f" Cleanliness:{comp.get('cleanliness_score', '?')}%"
+                        competitor_info += f" Amenities:{comp.get('amenities_score', '?')}%"
+                        competitor_info += f" Value:{comp.get('value_score', '?')}%"
+                
+                # Format hotel location details
+                location_info = ""
+                if hotel_details:
+                    for h in hotel_details:
+                        location_info += f"\n{h.get('hotel_name', 'N/A')}: "
+                        location_info += f"Address: {h.get('Address', 'N/A')}, "
+                        location_info += f"Google Rating: {h.get('google_rating', 'N/A')}/5, "
+                        location_info += f"Amenities: {h.get('Amenities', 'N/A')[:100]}..."
+                
+                return {
+                    "aspect_hotel": ah.to_csv(index=False), 
+                    "driver": dr.to_csv(index=False),
+                    "pos_phrases": pp.to_csv(index=False), 
+                    "neg_phrases": np_.to_csv(index=False),
+                    "hotels": ", ".join(data_df["hotel_name"].unique()[:10]),
+                    "brands": ", ".join(data_df["Brand"].unique()),
+                    "cities": ", ".join(data_df["City"].unique()),
+                    "stars": ", ".join([str(int(s)) for s in data_df["Star_Category"].unique()]),
+                    "competitors": competitor_info if competitor_info else "No nearby competitors found",
+                    "location_details": location_info if location_info else "Location details not available"
+                }
             
             def run_analyst(q, data_df, hist):
-                ctx = build_context(data_df)
+                ctx = build_context(data_df, tuple(hotels_list))
                 hist_txt = "\n".join([f"{'User' if m['role']=='user' else 'SmaartAnalyst'}: {m['content']}" for m in hist[-4:]])
                 
-                prompt = f"""You are SmaartAnalyst, a hospitality brand intelligence expert.
+                prompt = f"""You are SmaartAnalyst, an AI-powered decision intelligence assistant for the hospitality industry.
+
+=== WHO YOU SERVE ===
+Hotel operations teams who need actionable intelligence from guest feedback:
+• Brand Manager - Brand perception, competitive positioning, reputation management
+• SEO & Marketing - Keywords, USPs, ad copy, competitive differentiation, what to highlight
+• Housekeeping - Room cleanliness, bathroom hygiene, linen quality, maintenance
+• Front Desk - Check-in/out experience, staff behavior, reception, concierge
+• Operations - Overall service delivery, process improvements, staff training
+• F&B (Food & Beverage) - Restaurant quality, breakfast, dining experience, menu
+
+=== YOUR PURPOSE ===
+Transform guest sentiment into DECISIONS and ACTIONS by department.
+Use location intelligence to provide competitive positioning advice.
+Every response MUST end with categorized action items.
 
 === CONTEXT ===
 Hotels: {ctx['hotels']}
 Brands: {ctx['brands']}
 Cities: {ctx['cities']}
-Stars: {ctx['stars']}
+Star Category: {ctx['stars']}
 
-=== SPELLING CORRECTIONS (apply to user query) ===
-Cities: bangalore/blr/banglore→Bengaluru, bombay→Mumbai, madras→Chennai, calcutta→Kolkata, hyd→Hyderabad
-Hotels: marriot→Marriott, oberoy→Oberoi, viventa→Vivanta, lela→Leela, hyat→Hyatt
-Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost/value→Value for Money
+=== LOCATION INTELLIGENCE ===
+{ctx['location_details'] if ctx['location_details'] else 'Location details not available'}
 
-=== HISTORY ===
+=== NEARBY COMPETITORS (same area, similar star category) ===
+{ctx['competitors'] if ctx['competitors'] else 'Competitor data not available'}
+
+=== SPELLING CORRECTIONS ===
+Cities: bangalore/blr/banglore→Bengaluru, bombay→Mumbai, madras→Chennai, calcutta→Kolkata
+Hotels: marriot→Marriott, oberoy→Oberoi, viventa→Vivanta, lela→Leela
+Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost→Value for Money
+
+=== CONVERSATION HISTORY ===
 {hist_txt}
 
 === DATA ===
@@ -436,23 +610,55 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost/value
 [Driver Analysis]
 {ctx['driver']}
 
-[Top Positive Phrases]
+[What Guests Love]
 {ctx['pos_phrases']}
 
-[Top Negative Phrases]
+[What Guests Complain About]
 {ctx['neg_phrases']}
 
 === QUESTION ===
 {q}
 
+=== RESPONSE FORMAT (ALWAYS FOLLOW THIS) ===
+
+📊 **Insight**: [2-3 sentence summary with specific scores. If competitors available, compare directly.]
+
+🎯 **Actions by Department**:
+
+👔 Brand Manager: [1 action on positioning vs competitors]
+
+📢 SEO & Marketing: [Keywords/USPs to promote. Format: "Target: [keyword]" "Avoid: [keyword]" "Ad copy: [phrase from guest reviews]". Compare to competitor weaknesses.]
+
+🛏️ Housekeeping: [1 specific action if room/cleanliness relevant]
+
+🛎️ Front Desk: [1 specific action if staff/check-in relevant]
+
+⚙️ Operations: [1 action on process/training]
+
+🍽️ F&B: [1 action if dining relevant]
+
+(Include 3-4 most relevant departments only)
+
+=== COMPETITIVE INTELLIGENCE RULES ===
+When competitor data is available:
+1. COMPARE aspect scores: "Your Dining (89%) beats Taj (78%) - PROMOTE THIS"
+2. FIND GAPS: "Competitor weak on Staff (65%) - steal with 'legendary service' messaging"
+3. IDENTIFY THREATS: "Competitor beats you on Pool (88% vs 72%) - AVOID 'pool' keywords"
+4. SUGGEST ATTACK: For "How do I beat X?" questions, give specific win/lose breakdown
+
+=== SEO & MARKETING SPECIAL INSTRUCTIONS ===
+- Use actual guest phrases for ad copy: "guests say 'best biryani' → use in Google Ads"
+- Location keywords: "near [landmark]", "best [aspect] in [area]"
+- Competitor weakness = your keyword opportunity
+- Format USPs as: "✓ PROMOTE: [strength]" and "✗ AVOID: [weakness]"
+
 === RULES ===
-1. Apply spelling corrections first.
-2. Answer ONLY from data. Never hallucinate.
-3. If query is non-English, respond in SAME language.
-4. Cite specific scores and hotel names.
-5. Lead with key finding, explain, give 1-2 recommendations.
-6. Max 250 words. No markdown headers.
-7. Satisfaction 0-100 (100%=all positive).
+1. Answer ONLY from data provided. Never hallucinate.
+2. If query is in Hindi/Tamil/Telugu, respond in SAME language but keep emoji headers.
+3. Always cite specific % scores.
+4. Be direct - max 250 words.
+5. ALWAYS end with "🎯 Actions by Department".
+6. Make every action specific and executable TODAY.
 """
                 sql = f"""SELECT ml_generate_text_llm_result FROM ML.GENERATE_TEXT(
                     MODEL `{PROJECT}.{DATASET}.gemini_flash_model`,
@@ -475,11 +681,21 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost/value
             
             # Suggestions
             if not st.session_state.analyst_history:
-                st.markdown("**💡 Suggested:**")
+                st.markdown("**💡 Ask SmaartAnalyst:**")
                 if len(hotels_list) == 1:
-                    sugs = [f"Strengths of {hotels_list[0][:20]}?", "What needs improvement?", "Dining feedback?", "3 action items?"]
+                    sugs = [
+                        f"How do I beat nearby competitors?",
+                        "What's my biggest USP for marketing?",
+                        "What are guests complaining about?",
+                        "Give me SEO keywords to target"
+                    ]
                 else:
-                    sugs = [f"Compare {hotels_list[0][:12]} vs {hotels_list[1][:12]}", "Best cleanliness?", "Biggest weakness?", "Rank by staff"]
+                    sugs = [
+                        f"Compare {hotels_list[0][:15]} vs {hotels_list[1][:15]}",
+                        "Who's winning on Dining?",
+                        "Which hotel should worry about cleanliness?",
+                        "Best USPs for each hotel's marketing"
+                    ]
                 
                 c1, c2 = st.columns(2)
                 for i, s in enumerate(sugs):
@@ -543,7 +759,42 @@ with tab_chat:
     
     if ui:
         processed = preprocess(ui)
-        enhanced = f"User Query: {processed}\n\nInstructions:\n1. If non-English, respond in SAME language.\n2. Use corrected names.\n3. Provide data-driven insights.\n\nOriginal: {ui}"
+        enhanced = f"""User Query: {processed}
+
+=== RESPONSE INSTRUCTIONS ===
+You are SmaartAnalyst, a hotel decision intelligence assistant.
+
+1. LANGUAGE: If query is in Hindi/Tamil/Telugu/Kannada, respond in SAME language but keep emoji headers.
+2. Use corrected hotel/city names from preprocessing.
+3. Provide data-driven insights with specific satisfaction % scores.
+
+=== RESPONSE FORMAT ===
+Always structure responses as:
+
+📊 **Insight**: [Key finding with specific scores. Compare to competitors if available.]
+
+🎯 **Actions by Department**:
+👔 Brand Manager: [positioning action]
+📢 SEO & Marketing: [keywords to target, USPs to promote, competitor weaknesses to exploit. Use guest phrases for ad copy.]
+🛏️ Housekeeping: [if room/cleanliness relevant]
+🛎️ Front Desk: [if staff/service relevant]
+⚙️ Operations: [process improvement]
+🍽️ F&B: [if dining relevant]
+
+(Include 3-4 most relevant departments)
+
+=== SEO & MARKETING RULES ===
+- Extract actual guest phrases for ad copy: "guests say 'best biryani' → use in Google Ads"
+- Location keywords: "best [aspect] in [city]", "near [landmark]"
+- Format: "✓ PROMOTE: [strength]" and "✗ AVOID: [weakness]"
+- Compare aspect scores vs competitors when available
+
+=== COMPETITIVE INTELLIGENCE ===
+- COMPARE: "Your Dining (89%) beats Taj (78%)"
+- FIND GAPS: "Competitor weak on Staff → steal with 'legendary service'"
+- THREATS: "Competitor beats you on Pool → avoid 'pool' keywords"
+
+Original Query: {ui}"""
         
         st.session_state.chat_msgs.append({"role":"user","content":ui})
         with st.chat_message("user"): st.markdown(ui)

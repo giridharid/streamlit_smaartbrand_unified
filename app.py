@@ -743,12 +743,31 @@ When competitor data is available:
 - Competitor weakness = your keyword opportunity
 - Format USPs as: "✓ PROMOTE: [strength]" and "✗ AVOID: [weakness]"
 
+=== FAQ GENERATION RULES ===
+When asked for FAQs (for website, SEO, GEO-based, etc.):
+- Generate 5-8 actual Q&A pairs based on the SELECTED hotel's data
+- Use the hotel's City, Address, and Location data from context
+- Pull actual guest phrases from positive/negative reviews
+- Focus on what guests ACTUALLY ask about (based on review mentions)
+- Categories to cover: Location/Transport, Dining, Amenities, Value, Room quality
+- Make answers specific using real satisfaction scores and guest quotes
+
+Format each FAQ as:
+**Q: [Natural question a guest would ask]?**
+A: [Answer using actual data - scores, guest phrases, location details]
+
+Generate FAQs dynamically based on:
+1. Hotel's strongest aspects (highest satisfaction %) → Promote in answers
+2. Hotel's location/city from context → Use for "near X" questions  
+3. Top positive phrases → Quote in answers
+4. Common concerns from negative phrases → Address proactively
+
 === RULES ===
 1. Answer ONLY from data provided. Never hallucinate.
 2. If query is in Hindi/Tamil/Telugu, respond in SAME language but keep emoji headers.
 3. Always cite specific % scores.
-4. Be direct - max 250 words.
-5. ALWAYS end with "🎯 Actions by Department".
+4. Be direct - max 300 words for FAQs.
+5. For non-FAQ queries, ALWAYS end with "🎯 Actions by Department".
 6. Make every action specific and executable TODAY.
 """
                 sql = f"""SELECT ml_generate_text_llm_result FROM ML.GENERATE_TEXT(

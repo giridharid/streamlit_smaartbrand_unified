@@ -1108,3 +1108,9 @@ Original Query: {ui}"""
 
 st.divider()
 st.caption("🏨 Smaartbrand Intelligence • Multi-language • BigQuery + Gemini")
+st.markdown("""
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #eee; margin-top: 20px;">
+    <img src="https://raw.githubusercontent.com/giridharid/streamlit_smaartbrand_unified/main/acquink_logo.png" alt="Acquink" style="height: 24px;">
+    <span style="color: #888; font-size: 12px;">Copyright © Acquink | All rights reserved 2026/span>
+</div>
+""", unsafe_allow_html=True)

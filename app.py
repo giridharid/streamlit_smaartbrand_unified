@@ -1113,25 +1113,59 @@ Original Query: {ui}"""
                                 ph.markdown(resp+"▌")
                     
                     if resp:
-                        # Extract 💭 follow-up questions from response
+                        # Extract follow-up questions from END of response
+                        # Handle multiple possible emoji patterns: 💭 🗨️ 💬 or lines starting with "How/What/Which" at end
                         lines = resp.split('\n')
                         followup_qs = []
-                        main_resp_lines = []
-                        for line in lines:
-                            if line.strip().startswith('💭') and '?' in line:
-                                q = line.strip().replace('💭', '').strip()
-                                if q: followup_qs.append(q)
-                            else:
-                                main_resp_lines.append(line)
                         
-                        # Show response without the 💭 questions
+                        # Work backwards to find follow-up questions
+                        i = len(lines) - 1
+                        followup_emojis = ['💭', '🗨️', '💬', '🗯️']
+                        while i >= 0:
+                            line = lines[i].strip()
+                            is_followup = False
+                            
+                            # Check for emoji-prefixed questions
+                            for emoji in followup_emojis:
+                                if line.startswith(emoji) and '?' in line:
+                                    q = line.replace(emoji, '').strip()
+                                    if q: 
+                                        followup_qs.insert(0, q)
+                                        is_followup = True
+                                    break
+                            
+                            # Also catch plain questions at end (How/What/Which/Why)
+                            if not is_followup and line and '?' in line:
+                                first_word = line.split()[0] if line.split() else ''
+                                if first_word.lower() in ['how', 'what', 'which', 'why', 'can', 'could', 'would']:
+                                    followup_qs.insert(0, line)
+                                    is_followup = True
+                            
+                            if is_followup:
+                                i -= 1
+                            elif line == '':
+                                i -= 1
+                            else:
+                                break
+                        
+                        # Everything before the follow-ups is main content
+                        main_resp_lines = lines[:i+1]
                         clean_resp = '\n'.join(main_resp_lines).strip()
-                        ph.markdown(clean_resp)
-                        st.session_state.chat_msgs.append({"role":"assistant","content":clean_resp})
+                        
+                        # Format the response with better styling
+                        formatted_resp = clean_resp
+                        # Add horizontal rules before major sections
+                        formatted_resp = formatted_resp.replace('🎯 Actions by Department:', '\n---\n### 🎯 Actions by Department\n')
+                        formatted_resp = formatted_resp.replace('📊 Insight:', '### 📊 Insight\n')
+                        formatted_resp = formatted_resp.replace('## Insights', '\n---\n### 💡 Insights\n')
+                        formatted_resp = formatted_resp.replace('# Insights', '\n---\n### 💡 Insights\n')
+                        
+                        ph.markdown(formatted_resp)
+                        st.session_state.chat_msgs.append({"role":"assistant","content":formatted_resp})
                         
                         # Store follow-up questions in session state
                         if followup_qs:
-                            st.session_state.followup_qs = followup_qs
+                            st.session_state.followup_qs = followup_qs[:3]  # Max 3
                     else:
                         ph.markdown("Done.")
                 else:

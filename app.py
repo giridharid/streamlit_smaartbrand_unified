@@ -1149,8 +1149,6 @@ Original Query: {query_to_process}"""
             except Exception as e:
                 status_placeholder.empty()
                 st.error(f"Error: {e}")
-        
-        st.rerun()
     
     if st.session_state.chat_msgs:
         if st.button("🗑️ Clear Chat"):
@@ -1163,11 +1161,5 @@ st.markdown("""
 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
     <img src="https://raw.githubusercontent.com/giridharid/streamlit_smaartbrand_unified/main/acquink_logo.png" alt="Acquink" style="height: 24px;">
     <span style="color: #888; font-size: 12px;">Copyright © Acquink | All rights reserved 2025</span>
-</div>
-""", unsafe_allow_html=True)
-st.markdown("""
-<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #eee; margin-top: 20px;">
-    <img src="https://raw.githubusercontent.com/giridharid/streamlit_smaartbrand_unified/main/acquink_logo.png" alt="Acquink" style="height: 24px;">
-    <span style="color: #888; font-size: 12px;">Copyright © Acquink | All rights reserved 2026/span>
 </div>
 """, unsafe_allow_html=True)

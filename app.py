@@ -1015,7 +1015,16 @@ with tab_chat:
             q = re.sub(r'\b'+re.escape(a)+r'\b', c, q, flags=re.IGNORECASE)
         return q
     
+    # Check if there's a pending query from button click
+    if "pending_chat_query" not in st.session_state:
+        st.session_state.pending_chat_query = None
+    
     ui = st.chat_input("Ask about hotels... (e.g., 'बेंगलुरु में सबसे अच्छा होटल?')")
+    
+    # Use pending query if exists
+    if st.session_state.pending_chat_query:
+        ui = st.session_state.pending_chat_query
+        st.session_state.pending_chat_query = None
     
     # ─────────────────────────────────────────
     # SUGGESTED QUESTIONS FOR CHAT TAB
@@ -1032,7 +1041,8 @@ with tab_chat:
         for i, sug in enumerate(chat_suggestions):
             col = cols[i % 2]
             if col.button(sug, key=f"chat_sug_{i}", use_container_width=True):
-                ui = sug  # Set ui to the clicked suggestion
+                st.session_state.pending_chat_query = sug
+                st.rerun()
     
     if st.session_state.chat_msgs and not ui:
         # Follow-up suggestions after response
@@ -1047,7 +1057,8 @@ with tab_chat:
         for i, sug in enumerate(followup_suggestions):
             col = cols[i % 2]
             if col.button(sug, key=f"chat_followup_{i}_{len(st.session_state.chat_msgs)}", use_container_width=True):
-                ui = sug  # Set ui to the clicked suggestion
+                st.session_state.pending_chat_query = sug
+                st.rerun()
     
     if ui:
         processed = preprocess(ui)

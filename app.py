@@ -1026,13 +1026,18 @@ with tab_chat:
     
     if not st.session_state.chat_msgs and not ui:
         st.markdown("**💡 Try asking:**")
-        c1, c2 = st.columns(2)
-        if c1.button("Compare ITC Kohenur vs Taj Hyderabad", key="q1"): 
-            st.session_state.pending_q = "Compare ITC Kohenur vs Taj Hyderabad"
-            st.rerun()
-        if c2.button("R&D: New hotel in Sarjapur Road", key="q2"): 
-            st.session_state.pending_q = "If I open a new hotel in Sarjapur Road, what should I focus on?"
-            st.rerun()
+        initial_qs = [
+            ("Compare ITC Kohenur vs Taj Hyderabad", "Compare ITC Kohenur vs Taj Hyderabad"),
+            ("R&D: New hotel in Sarjapur Road", "If I open a new hotel in Sarjapur Road, what should I focus on?"),
+            ("Leela vs Taj - Who wins?", "Compare Leela Palace vs Taj in Bengaluru"),
+            ("Best things about Leela Palace Delhi", "What are the best things about Leela Palace Delhi?"),
+            ("Oberoi vs Westin showdown", "Compare Oberoi vs Westin - which is better?")
+        ]
+        cols = st.columns(3)
+        for i, (label, query) in enumerate(initial_qs):
+            if cols[i % 3].button(label, key=f"q{i}", use_container_width=True):
+                st.session_state.pending_q = query
+                st.rerun()
     
     if ui:
         processed = preprocess(ui)
@@ -1108,8 +1113,25 @@ Original Query: {ui}"""
                                 ph.markdown(resp+"▌")
                     
                     if resp:
-                        ph.markdown(resp)
-                        st.session_state.chat_msgs.append({"role":"assistant","content":resp})
+                        # Extract 💭 follow-up questions from response
+                        lines = resp.split('\n')
+                        followup_qs = []
+                        main_resp_lines = []
+                        for line in lines:
+                            if line.strip().startswith('💭') and '?' in line:
+                                q = line.strip().replace('💭', '').strip()
+                                if q: followup_qs.append(q)
+                            else:
+                                main_resp_lines.append(line)
+                        
+                        # Show response without the 💭 questions
+                        clean_resp = '\n'.join(main_resp_lines).strip()
+                        ph.markdown(clean_resp)
+                        st.session_state.chat_msgs.append({"role":"assistant","content":clean_resp})
+                        
+                        # Store follow-up questions in session state
+                        if followup_qs:
+                            st.session_state.followup_qs = followup_qs
                     else:
                         ph.markdown("Done.")
                 else:
@@ -1117,10 +1139,20 @@ Original Query: {ui}"""
             except Exception as e:
                 st.error(f"Error: {e}")
     
+    # Display clickable follow-up questions
+    if "followup_qs" in st.session_state and st.session_state.followup_qs and st.session_state.chat_msgs:
+        st.markdown("**💡 Follow-up:**")
+        for i, fq in enumerate(st.session_state.followup_qs[:3]):  # Max 3 questions
+            if st.button(fq, key=f"fq_{len(st.session_state.chat_msgs)}_{i}", use_container_width=True):
+                st.session_state.pending_q = fq
+                st.session_state.followup_qs = []  # Clear after click
+                st.rerun()
+    
     if st.session_state.chat_msgs:
         if st.button("🗑️ Clear Chat"):
             st.session_state.chat_msgs = []
             st.session_state.chat_id = f"smaart-{uuid.uuid4().hex[:6]}"
+            st.session_state.followup_qs = []
             st.rerun()
 
 st.divider()

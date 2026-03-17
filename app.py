@@ -1015,10 +1015,12 @@ with tab_chat:
             q = re.sub(r'\b'+re.escape(a)+r'\b', c, q, flags=re.IGNORECASE)
         return q
     
+    ui = st.chat_input("Ask about hotels... (e.g., 'बेंगलुरु में सबसे अच्छा होटल?')")
+    
     # ─────────────────────────────────────────
     # SUGGESTED QUESTIONS FOR CHAT TAB
     # ─────────────────────────────────────────
-    if not st.session_state.chat_msgs:
+    if not st.session_state.chat_msgs and not ui:
         st.markdown("**💡 Try asking:**")
         chat_suggestions = [
             "Compare ITC Kohenur vs Taj Hyderabad",
@@ -1030,9 +1032,9 @@ with tab_chat:
         for i, sug in enumerate(chat_suggestions):
             col = cols[i % 2]
             if col.button(sug, key=f"chat_sug_{i}", use_container_width=True):
-                st.session_state.pending_chat_query = sug
-                st.rerun()
-    else:
+                ui = sug  # Set ui to the clicked suggestion
+    
+    if st.session_state.chat_msgs and not ui:
         # Follow-up suggestions after response
         st.markdown("**💡 Follow-up:**")
         followup_suggestions = [
@@ -1045,18 +1047,10 @@ with tab_chat:
         for i, sug in enumerate(followup_suggestions):
             col = cols[i % 2]
             if col.button(sug, key=f"chat_followup_{i}_{len(st.session_state.chat_msgs)}", use_container_width=True):
-                st.session_state.pending_chat_query = sug
-                st.rerun()
+                ui = sug  # Set ui to the clicked suggestion
     
-    # Check for pending query from button click
-    pending_query = st.session_state.pop("pending_chat_query", None)
-    ui = st.chat_input("Ask about hotels... (e.g., 'बेंगलुरु में सबसे अच्छा होटल?')")
-    
-    # Use pending query if exists, otherwise use chat input
-    query_to_process = pending_query or ui
-    
-    if query_to_process:
-        processed = preprocess(query_to_process)
+    if ui:
+        processed = preprocess(ui)
         enhanced = f"""User Query: {processed}
 
 === RESPONSE INSTRUCTIONS ===
@@ -1092,15 +1086,13 @@ Always structure responses as:
 - FIND GAPS: "Competitor weak on Staff → steal with 'legendary service'"
 - THREATS: "Competitor beats you on Pool → avoid 'pool' keywords"
 
-Original Query: {query_to_process}"""
+Original Query: {ui}"""
         
-        st.session_state.chat_msgs.append({"role":"user","content":query_to_process})
-        with st.chat_message("user"): st.markdown(query_to_process)
+        st.session_state.chat_msgs.append({"role":"user","content":ui})
+        with st.chat_message("user"): st.markdown(ui)
         
         with st.chat_message("assistant"):
             ph = st.empty()
-            status = st.empty()
-            
             try:
                 from google.cloud import geminidataanalytics_v1alpha as gda
                 cc = get_chat_client()
@@ -1118,23 +1110,18 @@ Original Query: {query_to_process}"""
                         "messages":[{"user_message":{"text":enhanced}}]})
                     
                     resp = ""
-                    status.caption("⏳ Crunching data...")
-                    
                     for chunk in stream:
                         if hasattr(chunk,'system_message') and hasattr(chunk.system_message,'text'):
-                            status.caption("⏳ Analyzing...")  # Just show simple status instead of internal steps
+                            pass  # Hide internal steps
                         if hasattr(chunk,'agent_message') and hasattr(chunk.agent_message,'text'):
-                            status.empty()
                             for p in chunk.agent_message.text.parts:
                                 resp += str(p)
                                 ph.markdown(resp+"▌")
                         elif hasattr(chunk,'message') and hasattr(chunk.message,'content'):
-                            status.empty()
                             for p in chunk.message.content.parts:
                                 resp += p.text if hasattr(p,'text') else str(p)
                                 ph.markdown(resp+"▌")
                     
-                    status.empty()
                     if resp:
                         ph.markdown(resp)
                         st.session_state.chat_msgs.append({"role":"assistant","content":resp})
@@ -1143,7 +1130,6 @@ Original Query: {query_to_process}"""
                 else:
                     ph.markdown("⚠️ Chat unavailable.")
             except Exception as e:
-                status.empty()
                 st.error(f"Error: {e}")
     
     if st.session_state.chat_msgs:

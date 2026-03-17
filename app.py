@@ -1098,8 +1098,8 @@ Original Query: {query_to_process}"""
         with st.chat_message("user"): st.markdown(query_to_process)
         
         with st.chat_message("assistant"):
-            status_placeholder = st.empty()
-            resp_placeholder = st.empty()
+            ph = st.empty()
+            status = st.empty()
             
             try:
                 from google.cloud import geminidataanalytics_v1alpha as gda
@@ -1118,36 +1118,32 @@ Original Query: {query_to_process}"""
                         "messages":[{"user_message":{"text":enhanced}}]})
                     
                     resp = ""
-                    status_placeholder.markdown("⏳ *Crunching data...*")
+                    status.caption("⏳ Crunching data...")
                     
                     for chunk in stream:
-                        # Hide internal system messages, just show simple status
                         if hasattr(chunk,'system_message') and hasattr(chunk.system_message,'text'):
-                            # Don't show internal steps, just update status
-                            status_placeholder.markdown("⏳ *Analyzing...*")
+                            status.caption("⏳ Analyzing...")  # Just show simple status instead of internal steps
                         if hasattr(chunk,'agent_message') and hasattr(chunk.agent_message,'text'):
-                            status_placeholder.empty()  # Clear status when response starts
+                            status.empty()
                             for p in chunk.agent_message.text.parts:
                                 resp += str(p)
-                                resp_placeholder.markdown(resp + "▌")
+                                ph.markdown(resp+"▌")
                         elif hasattr(chunk,'message') and hasattr(chunk.message,'content'):
-                            status_placeholder.empty()  # Clear status when response starts
+                            status.empty()
                             for p in chunk.message.content.parts:
                                 resp += p.text if hasattr(p,'text') else str(p)
-                                resp_placeholder.markdown(resp + "▌")
+                                ph.markdown(resp+"▌")
                     
-                    status_placeholder.empty()  # Clear any remaining status
-                    
+                    status.empty()
                     if resp:
-                        resp_placeholder.markdown(resp)
+                        ph.markdown(resp)
                         st.session_state.chat_msgs.append({"role":"assistant","content":resp})
                     else:
-                        resp_placeholder.markdown("✅ Done.")
+                        ph.markdown("Done.")
                 else:
-                    status_placeholder.empty()
-                    resp_placeholder.markdown("⚠️ Chat unavailable.")
+                    ph.markdown("⚠️ Chat unavailable.")
             except Exception as e:
-                status_placeholder.empty()
+                status.empty()
                 st.error(f"Error: {e}")
     
     if st.session_state.chat_msgs:

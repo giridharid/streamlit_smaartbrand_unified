@@ -1015,10 +1015,48 @@ with tab_chat:
             q = re.sub(r'\b'+re.escape(a)+r'\b', c, q, flags=re.IGNORECASE)
         return q
     
+    # ─────────────────────────────────────────
+    # SUGGESTED QUESTIONS FOR CHAT TAB
+    # ─────────────────────────────────────────
+    if not st.session_state.chat_msgs:
+        st.markdown("**💡 Try asking:**")
+        chat_suggestions = [
+            "Compare ITC Kohenur vs Taj Hyderabad",
+            "What are guests complaining about Leela Palace Bengaluru?",
+            "If I open a new hotel in Sarjapur Road, what should I focus on?",
+            "Give me GEO-based FAQs for ITC Grand Chola"
+        ]
+        cols = st.columns(2)
+        for i, sug in enumerate(chat_suggestions):
+            col = cols[i % 2]
+            if col.button(sug, key=f"chat_sug_{i}", use_container_width=True):
+                st.session_state.pending_chat_query = sug
+                st.rerun()
+    else:
+        # Follow-up suggestions after response
+        st.markdown("**💡 Follow-up:**")
+        followup_suggestions = [
+            "Go deeper on the weakest aspect",
+            "Give me SEO keywords to target",
+            "What do Business travelers complain about?",
+            "Generate FAQs for website"
+        ]
+        cols = st.columns(2)
+        for i, sug in enumerate(followup_suggestions):
+            col = cols[i % 2]
+            if col.button(sug, key=f"chat_followup_{i}_{len(st.session_state.chat_msgs)}", use_container_width=True):
+                st.session_state.pending_chat_query = sug
+                st.rerun()
+    
+    # Check for pending query from button click
+    pending_query = st.session_state.pop("pending_chat_query", None)
     ui = st.chat_input("Ask about hotels... (e.g., 'बेंगलुरु में सबसे अच्छा होटल?')")
     
-    if ui:
-        processed = preprocess(ui)
+    # Use pending query if exists, otherwise use chat input
+    query_to_process = pending_query or ui
+    
+    if query_to_process:
+        processed = preprocess(query_to_process)
         enhanced = f"""User Query: {processed}
 
 === RESPONSE INSTRUCTIONS ===
@@ -1054,13 +1092,15 @@ Always structure responses as:
 - FIND GAPS: "Competitor weak on Staff → steal with 'legendary service'"
 - THREATS: "Competitor beats you on Pool → avoid 'pool' keywords"
 
-Original Query: {ui}"""
+Original Query: {query_to_process}"""
         
-        st.session_state.chat_msgs.append({"role":"user","content":ui})
-        with st.chat_message("user"): st.markdown(ui)
+        st.session_state.chat_msgs.append({"role":"user","content":query_to_process})
+        with st.chat_message("user"): st.markdown(query_to_process)
         
         with st.chat_message("assistant"):
-            ph = st.empty()
+            status_placeholder = st.empty()
+            resp_placeholder = st.empty()
+            
             try:
                 from google.cloud import geminidataanalytics_v1alpha as gda
                 cc = get_chat_client()
@@ -1078,27 +1118,39 @@ Original Query: {ui}"""
                         "messages":[{"user_message":{"text":enhanced}}]})
                     
                     resp = ""
+                    status_placeholder.markdown("⏳ *Crunching data...*")
+                    
                     for chunk in stream:
+                        # Hide internal system messages, just show simple status
                         if hasattr(chunk,'system_message') and hasattr(chunk.system_message,'text'):
-                            for p in chunk.system_message.text.parts: st.caption(f"💭 {p}")
+                            # Don't show internal steps, just update status
+                            status_placeholder.markdown("⏳ *Analyzing...*")
                         if hasattr(chunk,'agent_message') and hasattr(chunk.agent_message,'text'):
+                            status_placeholder.empty()  # Clear status when response starts
                             for p in chunk.agent_message.text.parts:
                                 resp += str(p)
-                                ph.markdown(resp+"▌")
+                                resp_placeholder.markdown(resp + "▌")
                         elif hasattr(chunk,'message') and hasattr(chunk.message,'content'):
+                            status_placeholder.empty()  # Clear status when response starts
                             for p in chunk.message.content.parts:
                                 resp += p.text if hasattr(p,'text') else str(p)
-                                ph.markdown(resp+"▌")
+                                resp_placeholder.markdown(resp + "▌")
+                    
+                    status_placeholder.empty()  # Clear any remaining status
                     
                     if resp:
-                        ph.markdown(resp)
+                        resp_placeholder.markdown(resp)
                         st.session_state.chat_msgs.append({"role":"assistant","content":resp})
                     else:
-                        ph.markdown("Done.")
+                        resp_placeholder.markdown("✅ Done.")
                 else:
-                    ph.markdown("⚠️ Chat unavailable.")
+                    status_placeholder.empty()
+                    resp_placeholder.markdown("⚠️ Chat unavailable.")
             except Exception as e:
+                status_placeholder.empty()
                 st.error(f"Error: {e}")
+        
+        st.rerun()
     
     if st.session_state.chat_msgs:
         if st.button("🗑️ Clear Chat"):
@@ -1107,7 +1159,12 @@ Original Query: {ui}"""
             st.rerun()
 
 st.divider()
-st.caption("🏨 Smaartbrand Intelligence • Multi-language • BigQuery + Gemini")
+st.markdown("""
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+    <img src="https://raw.githubusercontent.com/giridharid/streamlit_smaartbrand_unified/main/acquink_logo.png" alt="Acquink" style="height: 24px;">
+    <span style="color: #888; font-size: 12px;">Copyright © Acquink | All rights reserved 2025</span>
+</div>
+""", unsafe_allow_html=True)
 st.markdown("""
 <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #eee; margin-top: 20px;">
     <img src="https://raw.githubusercontent.com/giridharid/streamlit_smaartbrand_unified/main/acquink_logo.png" alt="Acquink" style="height: 24px;">

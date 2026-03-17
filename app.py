@@ -1015,50 +1015,24 @@ with tab_chat:
             q = re.sub(r'\b'+re.escape(a)+r'\b', c, q, flags=re.IGNORECASE)
         return q
     
-    # Check if there's a pending query from button click
-    if "pending_chat_query" not in st.session_state:
-        st.session_state.pending_chat_query = None
+    if "pending_q" not in st.session_state:
+        st.session_state.pending_q = None
     
     ui = st.chat_input("Ask about hotels... (e.g., 'बेंगलुरु में सबसे अच्छा होटल?')")
     
-    # Use pending query if exists
-    if st.session_state.pending_chat_query:
-        ui = st.session_state.pending_chat_query
-        st.session_state.pending_chat_query = None
+    if st.session_state.pending_q:
+        ui = st.session_state.pending_q
+        st.session_state.pending_q = None
     
-    # ─────────────────────────────────────────
-    # SUGGESTED QUESTIONS FOR CHAT TAB
-    # ─────────────────────────────────────────
     if not st.session_state.chat_msgs and not ui:
         st.markdown("**💡 Try asking:**")
-        chat_suggestions = [
-            "Compare ITC Kohenur vs Taj Hyderabad",
-            "What are guests complaining about Leela Palace Bengaluru?",
-            "If I open a new hotel in Sarjapur Road, what should I focus on?",
-            "Give me GEO-based FAQs for ITC Grand Chola"
-        ]
-        cols = st.columns(2)
-        for i, sug in enumerate(chat_suggestions):
-            col = cols[i % 2]
-            if col.button(sug, key=f"chat_sug_{i}", use_container_width=True):
-                st.session_state.pending_chat_query = sug
-                st.rerun()
-    
-    if st.session_state.chat_msgs and not ui:
-        # Follow-up suggestions after response
-        st.markdown("**💡 Follow-up:**")
-        followup_suggestions = [
-            "Go deeper on the weakest aspect",
-            "Give me SEO keywords to target",
-            "What do Business travelers complain about?",
-            "Generate FAQs for website"
-        ]
-        cols = st.columns(2)
-        for i, sug in enumerate(followup_suggestions):
-            col = cols[i % 2]
-            if col.button(sug, key=f"chat_followup_{i}_{len(st.session_state.chat_msgs)}", use_container_width=True):
-                st.session_state.pending_chat_query = sug
-                st.rerun()
+        c1, c2 = st.columns(2)
+        if c1.button("Compare ITC Kohenur vs Taj Hyderabad", key="q1"): 
+            st.session_state.pending_q = "Compare ITC Kohenur vs Taj Hyderabad"
+            st.rerun()
+        if c2.button("R&D: New hotel in Sarjapur Road", key="q2"): 
+            st.session_state.pending_q = "If I open a new hotel in Sarjapur Road, what should I focus on?"
+            st.rerun()
     
     if ui:
         processed = preprocess(ui)
@@ -1123,7 +1097,7 @@ Original Query: {ui}"""
                     resp = ""
                     for chunk in stream:
                         if hasattr(chunk,'system_message') and hasattr(chunk.system_message,'text'):
-                            pass  # Hide internal steps
+                            for p in chunk.system_message.text.parts: st.caption(f"💭 {p}")
                         if hasattr(chunk,'agent_message') and hasattr(chunk.agent_message,'text'):
                             for p in chunk.agent_message.text.parts:
                                 resp += str(p)
@@ -1150,9 +1124,10 @@ Original Query: {ui}"""
             st.rerun()
 
 st.divider()
+st.caption("🏨 Smaartbrand Intelligence • Multi-language • BigQuery + Gemini")
 st.markdown("""
-<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0;">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-top: 1px solid #eee; margin-top: 20px;">
     <img src="https://raw.githubusercontent.com/giridharid/streamlit_smaartbrand_unified/main/acquink_logo.png" alt="Acquink" style="height: 24px;">
-    <span style="color: #888; font-size: 12px;">Copyright © Acquink | All rights reserved 2025</span>
+    <span style="color: #888; font-size: 12px;">Copyright © Acquink | All rights reserved 2026/span>
 </div>
 """, unsafe_allow_html=True)

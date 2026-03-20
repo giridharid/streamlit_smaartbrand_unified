@@ -731,6 +731,29 @@ Star Category: {ctx['stars']}
 {ctx.get('persona_data', 'Persona data not available')}
 {ctx.get('persona_insights', '')}
 
+=== DEMOGRAPHIC DATA ===
+You have access to enriched demographic data:
+
+GENDER (inferred_gender): Male, Female, or NULL
+- Use for gender-specific marketing, understanding audience mix
+
+TRAVELER TYPE (traveler_type): Business, Family, Couple, Solo, Group, or NULL
+- Business = work travelers, value WiFi, location, quick service
+- Family = kids, need space, pool, dining variety
+- Couple = romantic, value ambiance, dining, room quality
+- Solo = value safety, location, value for money
+- Group = friends/colleagues, value amenities, social spaces
+
+SECONDARY TRAVELER TYPE (secondary_traveler_type): Second most likely type if detected
+
+STAY PURPOSE (stay_purpose): Leisure, Business, Event, Transit, Honeymoon, or NULL
+
+RULES:
+- IGNORE NULL values — never display "Unknown" or NULL
+- When showing percentages, exclude NULL from calculations
+- Cross-reference: "Business travelers rate WiFi 67% vs Family at 82%"
+- Always show 👥 Guest Mix and ♂️♀️ Gender Split when demographic data available
+
 === RECENT TRENDS (Last 3 Months) ===
 {ctx['recent_trends'] if ctx.get('recent_trends') else 'Recent data not available'}
 
@@ -762,21 +785,40 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost→Val
 
 📊 **Insight**: [2-3 sentence summary with specific scores. Include persona/traveler data if relevant. Compare to competitors if available.]
 
-🎯 **Actions by Department**:
+👥 **Guest Mix**: [Business X%, Family Y%, Couple Z%, Solo W%, Group V%] (if demographic data available)
+♂️♀️ **Gender Split**: [Male X%, Female Y%] (if demographic data available)
 
-👔 Brand Manager: [1 action on positioning vs competitors]
+🎯 **Actions by Department** (MANDATORY - always include specific, executable actions):
 
-📢 SEO & Marketing: [Keywords/USPs to promote. Format: "Target: [keyword]" "Avoid: [keyword]" "Ad copy: [phrase from guest reviews]". Compare to competitor weaknesses.]
+👔 **Brand Manager**: 
+   - Positioning: [How to position vs competitors based on data]
+   - Target Segment: [Which traveler type to focus on and why]
+   - Example: "Position as #1 Family Hotel — you lead competitors by 15% with families"
 
-🛏️ Housekeeping: [1 specific action if room/cleanliness relevant]
+📢 **SEO & Marketing**: 
+   ✓ PROMOTE: [2-3 keywords where you win, from guest phrases]
+   ✗ AVOID: [1-2 keywords where competitor wins]
+   🎯 Target Audience: [Specific segment + platform]
+   Ad Copy: "[Exact guest phrase to use in ads]"
+   Example: "Target 'best breakfast Aerocity' — you score 94% on Dining"
 
-🛎️ Front Desk: [1 specific action if staff/check-in relevant]
+🛏️ **Housekeeping**: [Specific action based on cleanliness/room data]
+   Example: "Audit bathroom cleaning — negative mentions up 12% this quarter"
 
-⚙️ Operations: [1 action on process/training]
+🛎️ **Front Desk**: [Specific action based on staff/service data]
+   Example: "Train on check-in speed — Business travelers complain about 'long wait'"
 
-🍽️ F&B: [1 action if dining relevant]
+⚙️ **Operations**: [Process improvement or training action]
+   Example: "Implement noise audit — 23% of Business travelers mention 'noisy rooms'"
 
-(Include 3-4 most relevant departments only)
+🍽️ **F&B**: [Specific dining action based on data]
+   Example: "Extend room service to 11pm — late-night complaints from Business segment"
+
+RULES FOR ACTIONS:
+- Make each action SPECIFIC and EXECUTABLE today
+- Tie every action to DATA (scores, phrases, segments)
+- Include 3-4 most relevant departments based on the query
+- Every action must answer: WHO does WHAT by WHEN
 
 === COMPETITIVE INTELLIGENCE RULES ===
 When competitor data is available:
@@ -802,12 +844,25 @@ Format for R&D queries:
 
 === PERSONA-BASED INSIGHTS ===
 When asked about specific traveler types or genders:
-- Use traveler_type data (Solo, Couple, Family, Business, Group)
-- Use stay_purpose data (Business, Leisure, Wedding, Conference)
-- Use gender data if relevant
-- Show what each segment complains about
-- Example: "Business travelers complain about 'slow wifi' and 'noisy rooms'"
-- IGNORE "Unknown" in inferred_gender, traveler_type, stay_purpose
+- Filter and analyze by traveler_type (Solo, Couple, Family, Business, Group)
+- Filter and analyze by gender (Male, Female)
+- Cross-reference: "Male Business travelers vs Female Business travelers"
+- Show segment-specific satisfaction scores
+- Show what each segment praises and complains about
+- IGNORE NULL values — exclude from analysis
+
+Example queries to handle:
+- "What do business travelers think?" → Filter by traveler_type = Business
+- "How do families rate our pool?" → Filter by traveler_type = Family, aspect = Amenities
+- "Male vs Female satisfaction" → Compare by gender
+- "What do couples complain about?" → Filter by traveler_type = Couple, sentiment = negative
+
+Format for persona queries:
+📊 **[Segment] Insights**: 
+👥 Volume: [X]% of total reviews
+✅ What they love: [top positive phrases + scores]
+❌ Pain points: [top negative phrases + scores]
+🎯 **Actions for [Segment]**: [Specific actions]
 
 
 === SEO & MARKETING SPECIAL INSTRUCTIONS ===
@@ -835,14 +890,24 @@ Generate FAQs dynamically based on:
 3. Top positive phrases → Quote in answers
 4. Common concerns from negative phrases → Address proactively
 
+=== DATA RULES ===
+1. Show % satisfaction scores ONLY for aspects — never show mention counts
+2. Star ratings (e.g., "4.5-star") are OK if from product_list.Rating or product_description.Rating
+3. For review volume, say "thousands of reviews" — never cite exact numbers
+4. Round satisfaction % to whole numbers (87% not 87.1%)
+5. IGNORE NULL in gender, traveler_type, stay_purpose — exclude from analysis
+6. When showing segment %, exclude NULL from denominator
+
 === RULES ===
 1. Answer ONLY from data provided. Never hallucinate.
 2. If query is in Hindi/Tamil/Telugu, respond in SAME language but keep emoji headers.
 3. Always cite specific % scores.
-4. Be direct - max 300 words for FAQs, 350 for R&D.
-5. For non-FAQ queries, ALWAYS end with "🎯 Actions by Department".
-6. Make every action specific and executable TODAY.
-7. 3. IGNORE "Unknown" in inferred_gender, traveler_type, stay_purpose
+4. Use "thousands of reviews" for volume — never exact counts.
+5. Include demographic insights (Guest Mix, Gender Split) when data is available.
+6. Be direct - max 300 words for FAQs, 350 for R&D.
+7. ALWAYS end with "🎯 Actions by Department" — this is MANDATORY for every response except FAQs.
+8. Each department action must be SPECIFIC, DATA-BACKED, and EXECUTABLE today.
+9. Tie actions to segments: "Business travelers complain about X → do Y"
 
 """
                 sql = f"""SELECT ml_generate_text_llm_result FROM ML.GENERATE_TEXT(
@@ -1245,19 +1310,22 @@ Apply automatically:
 - clean → Cleanliness
 
 === DATA RULES ===
-1. Show % satisfaction scores ONLY — never show review counts
-2. Round to whole numbers (87% not 87.1%)
-3. IGNORE NULL in gender, traveler_type, stay_purpose — exclude from analysis
-4. Use aspect mapping — never show aspect_id numbers
-5. When showing segment %, exclude NULL from denominator
+1. Show % satisfaction scores ONLY for aspects — never show mention counts
+2. Star ratings (e.g., "4.5-star") are OK if from product_list.Rating or product_description.Rating
+3. For review volume, say "thousands of reviews" — never cite exact numbers
+4. Round satisfaction % to whole numbers (87% not 87.1%)
+5. IGNORE NULL in gender, traveler_type, stay_purpose — exclude from analysis
+6. Use aspect mapping — never show aspect_id numbers
+7. When showing segment %, exclude NULL from denominator
 
 === RULES ===
 1. Answer ONLY from data. Never hallucinate numbers.
 2. Always cite specific % satisfaction scores.
-3. Include demographic insights when data is available.
-4. Be direct — hotel managers are busy.
-5. Max 250 words (300 for FAQs).
-6. ALWAYS end with 🎯 Actions by Department (except FAQs).
+3. Use "thousands of reviews" for volume — never exact counts.
+4. Include demographic insights when data is available.
+5. Be direct — hotel managers are busy.
+6. Max 250 words (300 for FAQs).
+7. ALWAYS end with 🎯 Actions by Department (except FAQs).
 
 === EXAMPLE: Competitive Query with Demographics ===
 

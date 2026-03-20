@@ -1068,10 +1068,10 @@ Location intelligence + sentiment = competitive positioning.
 === ASPECT MAPPING ===
 Always map aspect_id to display name and emoji:
 
-ASPECT_MAP = {1: "Dining", 2: "Cleanliness", 3: "Amenities", 4: "Staff",
-              5: "Room", 6: "Location", 7: "Value for Money", 8: "General"}
-ASPECT_ICONS = {"Dining": "🍽️", "Cleanliness": "🧹", "Amenities": "🏊", "Staff": "👨‍💼",
-                "Room": "🛏️", "Location": "📍", "Value for Money": "💰", "General": "⭐"}
+ASPECT_MAP = {{1: "Dining", 2: "Cleanliness", 3: "Amenities", 4: "Staff",
+              5: "Room", 6: "Location", 7: "Value for Money", 8: "General"}}
+ASPECT_ICONS = {{"Dining": "🍽️", "Cleanliness": "🧹", "Amenities": "🏊", "Staff": "👨‍💼",
+                "Room": "🛏️", "Location": "📍", "Value for Money": "💰", "General": "⭐"}}
 
 NEVER show aspect_id in output. Always use Aspect Name + Emoji.
 

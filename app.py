@@ -788,7 +788,7 @@ Aspects: food/restaurant→Dining, clean/hygiene→Cleanliness, price/cost→Val
 👥 **Guest Mix**: [Business X%, Family Y%, Couple Z%, Solo W%, Group V%] (if demographic data available)
 ♂️♀️ **Gender Split**: [Male X%, Female Y%] (if demographic data available)
 
-🎯 **Actions by Department** (MANDATORY - always include specific, executable actions):
+🎯 **Actions by Department** (for general queries only — skip for SEO/Ad Copy/FAQ queries):
 
 👔 **Brand Manager**: 
    - Positioning: [How to position vs competitors based on data]
@@ -913,10 +913,141 @@ Generate FAQs dynamically based on:
 3. Always cite specific % scores.
 4. Use "thousands of reviews" for volume — never exact counts.
 5. Include demographic insights (Guest Mix, Gender Split) when data is available.
-6. Be direct - max 300 words for FAQs, 350 for R&D.
-7. ALWAYS end with "🎯 Actions by Department" — this is MANDATORY for every response except FAQs.
-8. Each department action must be SPECIFIC, DATA-BACKED, and EXECUTABLE today.
-9. Tie actions to segments: "Business travelers complain about X → do Y"
+6. Be direct - max 300 words.
+7. MATCH OUTPUT FORMAT TO QUERY TYPE (see below).
+
+=== QUERY-SPECIFIC OUTPUT FORMATS ===
+
+CRITICAL: Do NOT always include department actions. Match format to query.
+
+**"SEO keywords" / "keywords to target"** → Keywords list ONLY:
+
+📊 **Insight**: [1 sentence on strengths]
+👥 **Guest Mix**: [segments]
+
+🔑 **SEO Keywords to Target**:
+✓ HIGH PRIORITY: [3-5 keywords with reasons based on your strengths]
+⚠️ SECONDARY: [2-3 opportunity keywords]
+✗ AVOID: [keywords where competitor wins or you're weak]
+
+🎯 **Target Platforms**: [based on guest mix]
+
+(NO department actions)
+
+---
+
+**"Ad copy" / "Google Ads"** → Ad copy ONLY:
+
+📊 **Target Audience**: [segment]
+
+📢 **Google Ads Copy**:
+**Headlines** (30 chars max):
+1. [strength-based]
+2. [guest phrase-based]
+3. [location/segment-based]
+
+**Descriptions** (90 chars max):
+1. [using guest phrases + strength]
+2. [CTA + differentiator]
+
+**Bid On**: [keywords]
+**Exclude**: [negative keywords]
+
+(NO department actions)
+
+---
+
+**"FAQs"** → Q&A pairs ONLY (5-8):
+
+**Q: [Question]?**
+A: [Answer with actual data]
+
+(NO department actions)
+
+---
+
+**"Compare" / "vs" / "beat"** → Comparison ONLY:
+
+📊 **Head-to-Head**:
+| Aspect | You | Competitor | Winner |
+...
+
+🎯 **Strategy**:
+✓ ATTACK: [their weakness]
+✗ DEFEND: [their strength - avoid]
+
+(NO department actions)
+
+---
+
+**General questions ("Tell me about", "Analyze", "How am I doing")** → Full format with 🎯 Actions by Department
+
+RULE: If they ask for ONE specific thing (keywords, ad copy, FAQs), give ONLY that thing.
+
+=== EXAMPLE: SEO Keywords (SHORT - NO DEPARTMENTS) ===
+User: "Give me SEO keywords"
+
+📊 **Insight**: Cleanliness (98%) and Staff (95%) are your top strengths.
+👥 **Guest Mix**: Family 47%, Business 25%, Couple 25%
+
+🔑 **SEO Keywords to Target**:
+✓ HIGH PRIORITY: 
+- "cleanest hotel Aerocity" — Cleanliness 98%
+- "best hotel staff Delhi airport" — Staff 95%
+- "family hotel near Delhi airport" — 47% Family mix
+
+⚠️ SECONDARY:
+- "luxury rooms Aerocity" — Room 93%
+- "hotel near IGI terminal 3"
+
+✗ AVOID:
+- "budget hotel Aerocity" — VFM only 40%
+- "cheap luxury Delhi"
+
+🎯 **Target Platforms**: Google Search (families), Meta (leisure), LinkedIn (business)
+
+(END - no department actions)
+
+=== EXAMPLE: Ad Copy (SHORT - NO DEPARTMENTS) ===
+User: "Write Google Ads copy"
+
+📊 **Target Audience**: Families (47%) and Business travelers (25%)
+
+📢 **Google Ads Copy**:
+**Headlines** (30 chars max):
+1. "Cleanest Hotel in Aerocity" — 98% satisfaction
+2. "5-Star Service Near Airport" — Staff 95%
+3. "Family-Friendly Luxury Delhi"
+
+**Descriptions** (90 chars max):
+1. "Guests love our 'exceptional staff' and 'spotless rooms'. Perfect for families near IGI Airport."
+2. "Experience 98% cleanliness satisfaction. Book your Aerocity stay today!"
+
+**Bid On**: "family hotel Delhi airport", "best staff Aerocity", "clean hotel IGI"
+**Exclude**: "budget hotel", "cheap Aerocity", "value hotel Delhi"
+
+(END - no department actions)
+
+=== EXAMPLE: FAQ (SHORT - NO DEPARTMENTS) ===
+User: "Generate FAQs for website"
+
+**Q: How far is Pullman from Delhi Airport?**
+A: Just 5 minutes from IGI Airport Terminal 3. Location satisfaction: 94%.
+
+**Q: Is the hotel good for families?**
+A: Yes. 47% of guests are families. Cleanliness 98%, Room 93%.
+
+**Q: How is the dining?**
+A: 94% satisfaction. Guests love the "lavish breakfast spread."
+
+**Q: Is the staff helpful?**
+A: Staff satisfaction is 95%. Guests mention "exceptional hospitality."
+
+(END - no department actions)
+
+=== EXAMPLE: General Query (FULL FORMAT WITH DEPARTMENTS) ===
+User: "Tell me about my hotel"
+→ Include full 📊 Insight, 👥 Guest Mix, ♂️♀️ Gender Split, and 🎯 Actions by Department
 
 """
                 sql = f"""SELECT ml_generate_text_llm_result FROM ML.GENERATE_TEXT(
@@ -1348,19 +1479,21 @@ Apply automatically:
 
 === QUERY-SPECIFIC OUTPUT FORMATS ===
 
-CRITICAL: Do NOT always include full department actions. Match format to query.
+CRITICAL: Do NOT always include department actions. Match format to query.
 
 **"SEO keywords" / "keywords to target"** → Keywords list ONLY:
 
-📊 **Insight**: [1 sentence]
+📊 **Insight**: [1 sentence on strengths]
 👥 **Guest Mix**: [segments]
 
 🔑 **SEO Keywords to Target**:
 ✓ HIGH PRIORITY: [3-5 keywords with reasons based on your strengths]
-⚠️ SECONDARY: [2-3 opportunity keywords]  
+⚠️ SECONDARY: [2-3 opportunity keywords]
 ✗ AVOID: [keywords where competitor wins or you're weak]
 
 🎯 **Target Platforms**: [based on guest mix]
+
+(NO department actions)
 
 ---
 
@@ -1381,6 +1514,8 @@ CRITICAL: Do NOT always include full department actions. Match format to query.
 **Bid On**: [keywords]
 **Exclude**: [negative keywords]
 
+(NO department actions)
+
 ---
 
 **"FAQs"** → Q&A pairs ONLY (5-8):
@@ -1388,7 +1523,7 @@ CRITICAL: Do NOT always include full department actions. Match format to query.
 **Q: [Question]?**
 A: [Answer with actual data]
 
-(No department actions for FAQs)
+(NO department actions)
 
 ---
 
@@ -1402,48 +1537,44 @@ A: [Answer with actual data]
 ✓ ATTACK: [their weakness]
 ✗ DEFEND: [their strength - avoid]
 
+(NO department actions)
+
 ---
 
-**General questions ("Tell me about", "How am I doing")** → Full format with 🎯 Actions by Department
+**General questions ("Tell me about", "Analyze", "How am I doing")** → Full format with 🎯 Actions by Department
 
-RULE: If they ask for ONE thing, give ONLY that thing.
+RULE: If they ask for ONE specific thing (keywords, ad copy, FAQs), give ONLY that thing.
 
-=== EXAMPLE: SEO Keywords Query (SHORT FORMAT - NO DEPARTMENT ACTIONS) ===
+=== EXAMPLE: SEO Keywords (SHORT - NO DEPARTMENTS) ===
+User: "Give me SEO keywords"
 
-User: "Give me SEO keywords to target"
-
-📊 **Insight**: Your strengths are Cleanliness (98%) and Staff (95%). Families (47%) are your biggest segment.
-
+📊 **Insight**: Cleanliness (98%) and Staff (95%) are your top strengths.
 👥 **Guest Mix**: Family 47%, Business 25%, Couple 25%
 
 🔑 **SEO Keywords to Target**:
-
-✓ HIGH PRIORITY (Your Strengths):
+✓ HIGH PRIORITY: 
 - "cleanest hotel Aerocity" — Cleanliness 98%
 - "best hotel staff Delhi airport" — Staff 95%
 - "family hotel near Delhi airport" — 47% Family mix
-- "best breakfast Aerocity" — Dining 94%
 
-⚠️ SECONDARY (Opportunities):
+⚠️ SECONDARY:
 - "luxury rooms Aerocity" — Room 93%
 - "hotel near IGI terminal 3"
 
-✗ AVOID (Weaknesses):
-- "budget hotel Aerocity" — Value for Money only 40%
-- "value for money Delhi hotel"
+✗ AVOID:
+- "budget hotel Aerocity" — VFM only 40%
+- "cheap luxury Delhi"
 
-🎯 **Target Platforms**: Google Search (families), Meta (leisure), LinkedIn (business 25%)
+🎯 **Target Platforms**: Google Search (families), Meta (leisure), LinkedIn (business)
 
-(END - no department actions for keyword queries)
+(END - no department actions)
 
-=== EXAMPLE: Ad Copy Query (SHORT FORMAT - NO DEPARTMENT ACTIONS) ===
-
-User: "Write Google Ads copy for my hotel"
+=== EXAMPLE: Ad Copy (SHORT - NO DEPARTMENTS) ===
+User: "Write Google Ads copy"
 
 📊 **Target Audience**: Families (47%) and Business travelers (25%)
 
 📢 **Google Ads Copy**:
-
 **Headlines** (30 chars max):
 1. "Cleanest Hotel in Aerocity" — 98% satisfaction
 2. "5-Star Service Near Airport" — Staff 95%
@@ -1456,30 +1587,26 @@ User: "Write Google Ads copy for my hotel"
 **Bid On**: "family hotel Delhi airport", "best staff Aerocity", "clean hotel IGI"
 **Exclude**: "budget hotel", "cheap Aerocity", "value hotel Delhi"
 
-(END - no department actions for ad copy queries)
+(END - no department actions)
 
-=== EXAMPLE: FAQ Query (SHORT FORMAT - NO DEPARTMENT ACTIONS) ===
-
-User: "Generate FAQs for our website"
+=== EXAMPLE: FAQ (SHORT - NO DEPARTMENTS) ===
+User: "Generate FAQs for website"
 
 **Q: How far is Pullman from Delhi Airport?**
-A: Just 5 minutes from IGI Airport Terminal 3. Guests praise our "convenient location" with 94% Location satisfaction.
+A: Just 5 minutes from IGI Airport Terminal 3. Location satisfaction: 94%.
 
 **Q: Is the hotel good for families?**
-A: Absolutely. 47% of our guests are families, and they rate us 98% on Cleanliness and 93% on Room quality. Families love our "spacious rooms" and "kid-friendly breakfast."
+A: Yes. 47% of guests are families. Cleanliness 98%, Room 93%.
 
 **Q: How is the dining?**
-A: Our Dining scores 94% satisfaction. Guests rave about the "lavish breakfast spread" and "variety of cuisines."
+A: 94% satisfaction. Guests love the "lavish breakfast spread."
 
 **Q: Is the staff helpful?**
-A: Staff satisfaction is 95%. Guests frequently mention "exceptional hospitality" and name specific team members like Priya and Chef Jeetendra.
+A: Staff satisfaction is 95%. Guests mention "exceptional hospitality."
 
-**Q: Is it worth the price?**
-A: While we're a premium property, guests who value cleanliness and service find excellent value. Our Cleanliness (98%) and Staff (95%) scores are among the highest in Aerocity.
+(END - no department actions)
 
-(END - no department actions for FAQ queries)
-
-=== EXAMPLE: Competitive Query (FULL FORMAT WITH DEPARTMENTS) ===
+=== EXAMPLE: General Query (FULL FORMAT WITH DEPARTMENTS) ===
 
 User: "How does my hotel compare to Taj on dining?"
 
